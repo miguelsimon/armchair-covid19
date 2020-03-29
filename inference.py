@@ -1,4 +1,5 @@
 import unittest
+from typing import NamedTuple, Tuple
 
 import numpy as np
 import scipy.stats
@@ -41,6 +42,60 @@ class DeathLLGivenModel:
         return get_death_ll(self.deaths, alpha, recoveries)
 
 
+class Coord(NamedTuple):
+    infected: float
+    alpha: float
+    beta_0: float
+    beta_1: float
+    gamma: float
+
+
+class Spec(NamedTuple):
+    """
+    Full specification for an inference problem
+
+    Parameters
+    ----------
+
+    population : float
+        Total population for the region being studied
+    deaths : ndarray
+        daily death counts due to disease
+    b_infected : Tuple[float]
+        lower and upper bounds on the possible infected population on day 0
+    b_alpha : Tuple[float]
+        lu bounds on infection fatality rate
+    b_beta_0 : Tuple[float]
+        lu bounds on SIR beta prior to lockdown
+    b_beta_1 : Tuple[float]
+        lu bounds on SIR beta after lockdown
+    t_lock : float
+        time lockdown went into effect
+    b_gamma : Tuple[float]
+        lu bounds on SIR gamma
+    """
+
+    population: float
+    deaths: ndarray
+    b_infected: Tuple[float, float]
+    b_alpha: Tuple[float, float]
+    b_beta_0: Tuple[float, float]
+    b_beta_1: Tuple[float, float]
+    t_lock: float
+    b_gamma: Tuple[float, float]
+
+    def sample(self) -> Coord:
+        uniform = np.random.uniform
+
+        return Coord(
+            infected=uniform(*self.b_infected),
+            alpha=uniform(*self.b_alpha),
+            beta_0=uniform(*self.b_beta_0),
+            beta_1=uniform(*self.b_beta_1),
+            gamma=uniform(*self.b_gamma),
+        )
+
+
 class Test(unittest.TestCase):
     def test_get_death_ll(self):
         # Check that the normal approximation is correct
@@ -80,3 +135,17 @@ class Test(unittest.TestCase):
 
         # b should maximize log likelihood
         self.assertEqual(np.argmax(lls), 0)
+
+    def test_Spec(self):
+        spec = Spec(
+            population=6.55 * 1000000,
+            deaths=np.array([0, 0, 0, 0, 1]),
+            b_infected=(1.0, 100000.0),
+            b_alpha=(0.0001, 0.01),
+            b_beta_0=(0.05, 0.4),
+            b_beta_1=(0.05, 0.4),
+            t_lock=4.0,
+            b_gamma=(1 / 40.0, 1 / 10.0),
+        )
+
+        print(spec.sample())
