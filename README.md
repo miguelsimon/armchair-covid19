@@ -4,8 +4,6 @@ This contains a layman's attempts at understanding covid-19 using quantitative m
 
 <img src="media/daily_deaths.png" alt="daily_deaths" width="400"/>
 
-[The jupyter notebook](sir.ipynb) contains the actual work.
-
 * [Goals](#goals)
   * [Disease model](#Disease-model)
   * [Infer model parameters](#Infer-model-parameters)
@@ -35,7 +33,7 @@ and came up with this, most scenarios for the plausible R0s and fatality rates w
 
 Instead of guessing at the model parameters we want to estimate them by building a statistical model and fitting it to observed daily fatalities: this is what qualified epidemiologists should be doing to advise governments on good policy.
 
-Full explanation in [inference.ipynb](inference.ipynb), code for this builds on the previous section and is mainly in [inference.py](inference.py).
+Full explanation in [inference.ipynb](inference.ipynb) (WIP), code for this builds on the previous section and is mainly in [inference.py](inference.py).
 
 If the model is close enough to reality (very doubtful in this case) it should be useful to forecast disease progression to some extent, and to retrospectively understand how the disease was spreading months ago.
 
