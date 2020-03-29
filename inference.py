@@ -1,5 +1,5 @@
 import unittest
-from typing import NamedTuple, Tuple
+from typing import List, NamedTuple, Tuple
 
 import numpy as np
 import scipy.stats
@@ -9,6 +9,30 @@ from sir import SIR, Beta, Recoveries
 
 
 def get_death_ll(deaths: ndarray, alpha: float, recoveries: ndarray) -> float:
+    """
+
+    Normal approximation to binomial log probability.
+
+    assumes deaths[i] ~ B(recoveries[i], alpha)
+
+    Parameters
+    ----------
+
+    deaths : ndarray
+        daily death counts
+    alpha : float
+        probability that a recovery is a death
+    recoveries : ndarray
+        daily recovery counts
+
+    Returns
+    -------
+
+    float
+        sum of log probabilities for all days
+
+    """
+
     means = recoveries * alpha
     variances = recoveries * alpha * (1 - alpha) + 0.001
     scales = np.sqrt(variances)
@@ -17,6 +41,10 @@ def get_death_ll(deaths: ndarray, alpha: float, recoveries: ndarray) -> float:
 
 
 class DeathLLGivenModel:
+    """
+    Calculates the log likelihood of observed deaths given the model parameters
+    """
+
     def __init__(self, deaths: ndarray):
         self.deaths = deaths
 
@@ -34,10 +62,8 @@ class DeathLLGivenModel:
         sir = SIR(beta, gamma, state_0)
 
         rec = Recoveries(sir)
-        recoveries_list = []
-        for i, _ in enumerate(self.deaths):
-            recoveries_list.append(rec(i))
-        recoveries = np.array(recoveries_list)
+
+        recoveries = rec.apply_to_span(len(self.deaths))
 
         return get_death_ll(self.deaths, alpha, recoveries)
 
@@ -85,6 +111,9 @@ class Spec(NamedTuple):
     b_gamma: Tuple[float, float]
 
     def sample(self) -> Coord:
+        """
+        Return a random sample from the prior
+        """
         uniform = np.random.uniform
 
         return Coord(
@@ -96,6 +125,10 @@ class Spec(NamedTuple):
         )
 
     def mcmc_propose(self, coord: Coord) -> Coord:
+        """
+        Sample from the Metropolis-Hastings jump distribution given a coord
+        """
+
         def proposal(x: float, bounds: Tuple[float, float]) -> float:
             """
             Perturb by a delta sampled from a gaussian at 1/50 scale of the bounds
@@ -112,6 +145,62 @@ class Spec(NamedTuple):
             beta_1=proposal(coord.beta_1, self.b_beta_1),
             gamma=proposal(coord.gamma, self.b_gamma),
         )
+
+
+class MCMCSampler:
+    """
+    Trivial Metropolis-Hastings MCMC sampler.
+
+    Parameters
+    ----------
+
+    spec : Spec
+        inference problem specification
+
+    """
+
+    def __init__(self, spec: Spec):
+        self.spec = spec
+
+        coord = spec.sample()
+
+        self.samples: List[Coord] = [coord]
+        self.logps: List[float] = [self.get_logp(coord)]
+
+    def get_logp(self, coord: Coord) -> float:
+        state0 = np.array([self.spec.population - coord.infected, coord.infected, 0])
+
+        m = DeathLLGivenModel(self.spec.deaths)
+
+        return m(
+            coord.alpha,
+            state0,
+            coord.beta_0,
+            coord.beta_1,
+            self.spec.t_lock,
+            coord.gamma,
+        )
+
+    def step(self) -> bool:
+        """
+        Attempt mcmc step, returns whether the proposal was accepted or rejected
+        """
+
+        current = self.samples[-1]
+        current_logp = self.logps[-1]
+
+        proposed = self.spec.mcmc_propose(current)
+        proposed_logp = self.get_logp(proposed)
+
+        log_acceptance_ratio = proposed_logp - current_logp
+        acceptance_ratio = np.exp(log_acceptance_ratio)
+
+        if np.random.random() <= acceptance_ratio:
+            self.samples.append(proposed)
+            self.logps.append(proposed_logp)
+            return True
+        else:
+            return False
 
 
 class Test(unittest.TestCase):
@@ -139,11 +228,9 @@ class Test(unittest.TestCase):
         sir = SIR(beta, gamma, state0)
         rec = Recoveries(sir)
         alpha = 0.1
-        deaths_list = []
 
-        for i in range(200):
-            deaths_list.append(alpha * rec(i))
-        deaths = np.array(deaths_list)
+        recoveries = rec.apply_to_span(200)
+        deaths = alpha * recoveries
 
         m = DeathLLGivenModel(deaths)
 
@@ -168,3 +255,22 @@ class Test(unittest.TestCase):
 
         coord = spec.sample()
         print(coord, spec.mcmc_propose(coord))
+
+    def test_MCMCSampler(self):
+        spec = Spec(
+            population=6.55 * 1000000,
+            deaths=np.array([0, 0, 0, 0, 1]),
+            b_infected=(1.0, 100000.0),
+            b_alpha=(0.0001, 0.01),
+            b_beta_0=(0.05, 0.4),
+            b_beta_1=(0.05, 0.4),
+            t_lock=4.0,
+            b_gamma=(1 / 40.0, 1 / 10.0),
+        )
+
+        sampler = MCMCSampler(spec)
+
+        for _ in range(10):
+            sampler.step()
+
+        print(sampler.logps)

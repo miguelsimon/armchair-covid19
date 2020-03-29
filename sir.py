@@ -133,6 +133,12 @@ class Recoveries:
         prev, cur = self.sim.get_r([day - 1, day])
         return cur - prev
 
+    def apply_to_span(self, num_days: int) -> ndarray:
+        recoveries_list = []
+        for i in range(num_days):
+            recoveries_list.append(self(i))
+        return np.array(recoveries_list)
+
 
 class Test(unittest.TestCase):
     def test_beta(self):
