@@ -95,6 +95,24 @@ class Spec(NamedTuple):
             gamma=uniform(*self.b_gamma),
         )
 
+    def mcmc_propose(self, coord: Coord) -> Coord:
+        def proposal(x: float, bounds: Tuple[float, float]) -> float:
+            """
+            Perturb by a delta sampled from a gaussian at 1/50 scale of the bounds
+            """
+            scale = (bounds[1] - bounds[0]) / 50
+            delta = np.random.normal() * scale
+            new_x = x + delta
+            return np.clip(new_x, bounds[0], bounds[1])
+
+        return Coord(
+            infected=proposal(coord.infected, self.b_infected),
+            alpha=proposal(coord.alpha, self.b_alpha),
+            beta_0=proposal(coord.beta_0, self.b_beta_0),
+            beta_1=proposal(coord.beta_1, self.b_beta_1),
+            gamma=proposal(coord.gamma, self.b_gamma),
+        )
+
 
 class Test(unittest.TestCase):
     def test_get_death_ll(self):
@@ -148,4 +166,5 @@ class Test(unittest.TestCase):
             b_gamma=(1 / 40.0, 1 / 10.0),
         )
 
-        print(spec.sample())
+        coord = spec.sample()
+        print(coord, spec.mcmc_propose(coord))
