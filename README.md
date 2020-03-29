@@ -2,7 +2,7 @@
 
 This contains a layman's attempts at understanding covid-19 using quantitative measures.
 
-![daily_deaths](media/daily_deaths.png)
+<img src="media/daily_deaths.png" alt="daily_deaths" width="300"/>
 
 [The jupyter notebook](sir.ipynb) contains the actual work.
 
@@ -22,7 +22,7 @@ A few months ago when I was growing confused at the news about covid-19: I decid
 
 and came up with something like this, most scenarios for the plausible R0s and fatality rates were pretty scary:
 
-![comparison](media/comparison.png)
+<img src="media/comparison.png" alt="comparison" width="300"/>
 
 Now I'm locked down and have time to burn I'll build a Bayesian model for this, which is something I enjoy but rarely get to do.
 
