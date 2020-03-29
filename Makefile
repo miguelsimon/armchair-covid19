@@ -32,7 +32,7 @@ env_ok: requirements.txt
 
 .PHONY: get_data
 get_data:
-	curl https://covid.ourworldindata.org/data/ecdc/total_deaths.csv --output total_deaths.csv
+	curl https://covid.ourworldindata.org/data/ecdc/new_deaths.csv --output new_deaths.csv
 
 .PHONY: run_notebook
 run_notebook: env_ok

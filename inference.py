@@ -200,6 +200,8 @@ class MCMCSampler:
             self.logps.append(proposed_logp)
             return True
         else:
+            self.samples.append(current)
+            self.logps.append(current_logp)
             return False
 
 
