@@ -2,6 +2,7 @@ jupyter
 pandas
 matplotlib
 numpy
+scipy
 mypy
 flake8
 black
