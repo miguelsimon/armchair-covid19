@@ -8,7 +8,9 @@ from numpy import ndarray
 from sir import SIR, Beta, Recoveries
 
 
-def get_death_ll(deaths: ndarray, alpha: float, recoveries: ndarray) -> float:
+def get_death_ll(
+    deaths: ndarray, alpha: float, recoveries: ndarray, fuzz: float
+) -> float:
     """
 
     Normal approximation to binomial log probability.
@@ -34,8 +36,8 @@ def get_death_ll(deaths: ndarray, alpha: float, recoveries: ndarray) -> float:
     """
 
     means = recoveries * alpha
-    variances = recoveries * alpha * (1 - alpha) + 0.001
-    scales = np.sqrt(variances)
+    variances = recoveries * alpha * (1 - alpha)
+    scales = np.sqrt(variances) + fuzz
     log_lls = scipy.stats.norm.logpdf(deaths, loc=means, scale=scales)
     return np.sum(log_lls)
 
@@ -56,6 +58,7 @@ class DeathLLGivenModel:
         beta_1: float,
         t_lock: float,
         gamma: float,
+        fuzz: float,
     ) -> float:
 
         beta = Beta(beta_0, beta_1, t_lock)
@@ -65,7 +68,7 @@ class DeathLLGivenModel:
 
         recoveries = rec.apply_to_span(len(self.deaths))
 
-        return get_death_ll(self.deaths, alpha, recoveries)
+        return get_death_ll(self.deaths, alpha, recoveries, fuzz)
 
 
 class Coord(NamedTuple):
@@ -99,6 +102,8 @@ class Spec(NamedTuple):
         time lockdown went into effect
     b_gamma : Tuple[float]
         lu bounds on SIR gamma
+    fuzz : float
+        add this to the scale of the Normal approximation of the binomial
     """
 
     population: float
@@ -109,6 +114,7 @@ class Spec(NamedTuple):
     b_beta_1: Tuple[float, float]
     t_lock: float
     b_gamma: Tuple[float, float]
+    fuzz: float
 
     def sample(self) -> Coord:
         """
@@ -131,9 +137,9 @@ class Spec(NamedTuple):
 
         def proposal(x: float, bounds: Tuple[float, float]) -> float:
             """
-            Perturb by a delta sampled from a gaussian at 1/50 scale of the bounds
+            Perturb by a delta sampled from a gaussian at scale dependent on the bounds
             """
-            scale = (bounds[1] - bounds[0]) / 50
+            scale = (bounds[1] - bounds[0]) / 100
             delta = np.random.normal() * scale
             new_x = x + delta
             return np.clip(new_x, bounds[0], bounds[1])
@@ -179,6 +185,7 @@ class MCMCSampler:
             coord.beta_1,
             self.spec.t_lock,
             coord.gamma,
+            self.spec.fuzz,
         )
 
     def step(self) -> bool:
@@ -205,6 +212,22 @@ class MCMCSampler:
             return False
 
 
+class Predict:
+    def __init__(self, spec: Spec):
+        self.spec = spec
+
+    def predict(self, coord: Coord) -> ndarray:
+        state0 = np.array([self.spec.population - coord.infected, coord.infected, 0])
+        beta = Beta(coord.beta_0, coord.beta_1, self.spec.t_lock)
+        sir = SIR(beta, coord.gamma, state0)
+
+        rec = Recoveries(sir)
+
+        recoveries = rec.apply_to_span(365)
+        predicted_mean_deaths = recoveries * coord.alpha
+        return predicted_mean_deaths
+
+
 class Test(unittest.TestCase):
     def test_get_death_ll(self):
         # Check that the normal approximation is correct
@@ -213,7 +236,7 @@ class Test(unittest.TestCase):
         recoveries = np.array([1000])
         alpha = 0.1
 
-        log_ll = get_death_ll(deaths, alpha, recoveries)
+        log_ll = get_death_ll(deaths, alpha, recoveries, fuzz=0.0)
 
         binomial_ll = scipy.stats.binom.logpmf(deaths[0], recoveries[0], alpha)
 
@@ -236,9 +259,11 @@ class Test(unittest.TestCase):
 
         m = DeathLLGivenModel(deaths)
 
+        fuzz = 1.0
+
         lls = []
         for test_b in [b, 0.05, 0.3]:
-            lls.append(m(alpha, state0, test_b, test_b, 0, gamma))
+            lls.append(m(alpha, state0, test_b, test_b, 0, gamma, fuzz))
 
         # b should maximize log likelihood
         self.assertEqual(np.argmax(lls), 0)
@@ -253,6 +278,7 @@ class Test(unittest.TestCase):
             b_beta_1=(0.05, 0.4),
             t_lock=4.0,
             b_gamma=(1 / 40.0, 1 / 10.0),
+            fuzz=1.0,
         )
 
         coord = spec.sample()
@@ -268,6 +294,7 @@ class Test(unittest.TestCase):
             b_beta_1=(0.05, 0.4),
             t_lock=4.0,
             b_gamma=(1 / 40.0, 1 / 10.0),
+            fuzz=1.0,
         )
 
         sampler = MCMCSampler(spec)
@@ -276,3 +303,20 @@ class Test(unittest.TestCase):
             sampler.step()
 
         print(sampler.logps)
+
+    def test_Predict(self):
+        spec = Spec(
+            population=6.55 * 1000000,
+            deaths=np.array([0, 0, 0, 0, 1]),
+            b_infected=(1.0, 100000.0),
+            b_alpha=(0.0001, 0.01),
+            b_beta_0=(0.05, 0.4),
+            b_beta_1=(0.05, 0.4),
+            t_lock=4.0,
+            b_gamma=(1 / 40.0, 1 / 10.0),
+            fuzz=1.0,
+        )
+
+        predict = Predict(spec)
+        coord = spec.sample()
+        print(predict.predict(coord))

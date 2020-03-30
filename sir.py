@@ -92,14 +92,25 @@ class SIR:
 
         cur = state_0.copy()
 
-        res = [state_0]
-        ts = [0.0]
-        dt = 1 / 24.0
+        # res = [state_0]
+        # ts = [0.0]
+        # dt = 1 / 24.0
+        #
+        # while ts[-1] < 365:
+        #     cur = step(self.beta(ts[-1]), self.gamma, cur, dt)
+        #     res.append(cur.copy())
+        #     ts.append(ts[-1] + dt)
 
-        while ts[-1] < 365:
-            cur = step(self.beta(ts[-1]), self.gamma, cur, dt)
-            res.append(cur.copy())
-            ts.append(ts[-1] + dt)
+        dt = 1 / 24.0
+        cur_t = 0.0
+        n = int(365 / dt) + 1
+        ts = np.zeros(n)
+        res = np.zeros((n, 3))
+        for i in range(n):
+            res[i] = cur
+            ts[i] = cur_t
+            cur = step(self.beta(cur_t), self.gamma, cur, dt)
+            cur_t += dt
 
         self.s, self.i, self.r = np.array(res).transpose()
 
@@ -134,10 +145,11 @@ class Recoveries:
         return cur - prev
 
     def apply_to_span(self, num_days: int) -> ndarray:
-        recoveries_list = []
-        for i in range(num_days):
-            recoveries_list.append(self(i))
-        return np.array(recoveries_list)
+        i_cur = np.arange(num_days)
+        i_prev = i_cur - 1
+        cur = self.sim.get_r(i_cur)
+        prev = self.sim.get_r(i_prev)
+        return cur - prev
 
 
 class Test(unittest.TestCase):
